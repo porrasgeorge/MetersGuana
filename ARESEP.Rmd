@@ -6,7 +6,7 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(dplyr)
-library(RODBC)
+#library(RODBC)
 library(lubridate)
 library(feather)
 ```
@@ -151,6 +151,28 @@ datalog_byMonth <- dataLog %>%
             TN107_109 = sum(TN107_109), 
             TN109_113 = sum(TN109_113), 
             TN113 = sum(TN113))
+
+```
+
+Valores porcentuales
+
+```{r}
+percent <- function(x, digits = 2, format = "f", ...) {
+  paste0(formatC(100 * x, format = format, digits = digits, ...), "%")
+}
+
+datalog_byMonth_perc <- datalog_byMonth
+datalog_byMonth_perc$TN087 <- percent(datalog_byMonth_perc$TN087 / datalog_byMonth_perc$cantidad)
+datalog_byMonth_perc$TN087_091 <- percent(datalog_byMonth_perc$TN087_091 / datalog_byMonth_perc$cantidad)
+datalog_byMonth_perc$TN091_093 <- percent(datalog_byMonth_perc$TN091_093 / datalog_byMonth_perc$cantidad)
+datalog_byMonth_perc$TN093_095 <- percent(datalog_byMonth_perc$TN093_095 / datalog_byMonth_perc$cantidad)
+datalog_byMonth_perc$TN095_105 <- percent(datalog_byMonth_perc$TN095_105 / datalog_byMonth_perc$cantidad)
+datalog_byMonth_perc$TN105_107 <- percent(datalog_byMonth_perc$TN105_107 / datalog_byMonth_perc$cantidad)
+datalog_byMonth_perc$TN107_109 <- percent(datalog_byMonth_perc$TN107_109 / datalog_byMonth_perc$cantidad)
+datalog_byMonth_perc$TN109_113 <- percent(datalog_byMonth_perc$TN109_113 / datalog_byMonth_perc$cantidad)
+datalog_byMonth_perc$TN113 <- percent(datalog_byMonth_perc$TN113 / datalog_byMonth_perc$cantidad)
+
+
 
 ```
 

@@ -1,1 +1,0 @@
-"0","quantity <- sqlQuery(channel , ""select top 500000 ID, Name from Quantity where Name like 'Voltage Phases%'"")"

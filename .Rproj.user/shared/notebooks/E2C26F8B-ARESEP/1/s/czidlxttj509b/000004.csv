@@ -1,3 +1,0 @@
-"0","dataLog2 <- read_feather(""featherFiles/dataLog2_3months.feather"")"
-"0","quantity <- read_feather(""featherFiles/quantity.feather"")"
-"0","sources <- read_feather(""featherFiles/sources.feather"")"
