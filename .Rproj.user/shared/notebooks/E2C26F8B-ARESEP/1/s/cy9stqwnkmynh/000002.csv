@@ -1,0 +1,2 @@
+"0","sources <- sqlQuery(channel , ""select top 100 ID, Name, DisplayName from Source where Name like 'Coopeguanacaste.%'"")"
+"0","sources$Name <- gsub(""Coopeguanacaste."", '', sources$Name)"
