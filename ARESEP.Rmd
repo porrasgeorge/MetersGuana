@@ -9,19 +9,32 @@ library(dplyr)
 #library(RODBC)
 library(lubridate)
 library(feather)
+library(ggplot2)
+library(tidyr)
+library(xlsx)
+
 ```
 
 Constantes
 ```{r}
-# tension nomimal
-tn <- 24900
 # mes anho y numero de meses del reporte
 year <- 2020
 month <- 1
-numberOfMonths <- 3
+numberOfMonths <- 1
+
+# tension nomimal
+tn <- 24900
+limit087 <- 0.87*tn
+limit091 <- 0.91*tn
+limit093 <- 0.93*tn
+limit095 <- 0.95*tn
+limit105 <- 1.05*tn
+limit107 <- 1.07*tn
+limit109 <- 1.09*tn
+limit113 <- 1.13*tn
+lockBinding(c("tn", "limit087", "limit091", "limit093", "limit095", "limit105", "limit107", "limit109", "limit113"), globalenv())
 
 ```
-
 
 Conexion a SQL Server
 
@@ -101,39 +114,42 @@ Read Data
 dataLog2 <- read_feather("featherFiles/dataLog2_3months.feather")
 quantity <- read_feather("featherFiles/quantity.feather")
 sources <- read_feather("featherFiles/sources.feather")
+quantity$Name <- c('Vab', 'Vbc', 'Vca')
 ```
 
 
-Union de tablas y borrado de columnas no importantes
+TEMP filter
+```{r}
+dataLog2 <- dataLog2 %>% filter(month == 2)
+```
+
+
+Union de tablas, borrado de columnas no importantes y Categorizacion de valores
 
 ```{r}
+
 dataLog <- dataLog2 %>% left_join(quantity, by = c('QuantityID' = "ID")) %>%
   left_join(sources, by = c('SourceID' = "ID"))
 
+rm(dataLog2)
 names(dataLog)[names(dataLog) == "Name.x"] <- "Quantity"
 names(dataLog)[names(dataLog) == "Name.y"] <- "Meter"
 
 dataLog$SourceID <- NULL
 dataLog$QuantityID <- NULL
 dataLog$DisplayName <- NULL
-```
 
-
-Categorizacion de valores
-```{r}
-
-dataLog$TN087 <- if_else(dataLog$Value <= 0.87*tn, TRUE, FALSE)
-dataLog$TN087_091 <- if_else((dataLog$Value > 0.87*tn) & (dataLog$Value <= 0.87*tn), TRUE, FALSE)
-dataLog$TN091_093 <- if_else((dataLog$Value > 0.91*tn) & (dataLog$Value <= 0.93*tn), TRUE, FALSE)
-dataLog$TN093_095 <- if_else((dataLog$Value > 0.93*tn) & (dataLog$Value <= 0.95*tn), TRUE, FALSE)
-dataLog$TN095_105 <- if_else((dataLog$Value > 0.95*tn) & (dataLog$Value <= 1.05*tn), TRUE, FALSE)
-dataLog$TN105_107 <- if_else((dataLog$Value > 1.05*tn) & (dataLog$Value <= 1.07*tn), TRUE, FALSE)
-dataLog$TN107_109 <- if_else((dataLog$Value > 1.07*tn) & (dataLog$Value <= 1.09*tn), TRUE, FALSE)
-dataLog$TN109_113 <- if_else((dataLog$Value > 1.09*tn) & (dataLog$Value <= 1.13*tn), TRUE, FALSE)
-dataLog$TN113 <- if_else(dataLog$Value > 1.13*tn, TRUE, FALSE)
+dataLog$TN087 <- if_else(dataLog$Value <= limit087, TRUE, FALSE)
+dataLog$TN087_091 <- if_else((dataLog$Value > limit087) & (dataLog$Value <= limit091), TRUE, FALSE)
+dataLog$TN091_093 <- if_else((dataLog$Value > limit091) & (dataLog$Value <= limit093), TRUE, FALSE)
+dataLog$TN093_095 <- if_else((dataLog$Value > limit093) & (dataLog$Value <= limit095), TRUE, FALSE)
+dataLog$TN095_105 <- if_else((dataLog$Value > limit095) & (dataLog$Value <= limit105), TRUE, FALSE)
+dataLog$TN105_107 <- if_else((dataLog$Value > limit105) & (dataLog$Value <= limit107), TRUE, FALSE)
+dataLog$TN107_109 <- if_else((dataLog$Value > limit107) & (dataLog$Value <= limit109), TRUE, FALSE)
+dataLog$TN109_113 <- if_else((dataLog$Value > limit109) & (dataLog$Value <= limit113), TRUE, FALSE)
+dataLog$TN113 <- if_else(dataLog$Value > limit113, TRUE, FALSE)
 
 ```
-
 
 
 Sumarizacion de variables
@@ -154,6 +170,86 @@ datalog_byMonth <- dataLog %>%
 
 ```
 
+Creacion del histograma
+
+```{r}
+# Libro de excel
+wb<-createWorkbook(type="xlsx")
+cs1 <- CellStyle(wb) + Font(wb, isItalic=TRUE)           # rowcolumns
+cs2 <- CellStyle(wb) + Font(wb, color="blue")
+cs3 <- CellStyle(wb) + Font(wb, isBold=TRUE) + Border()  # header
+cs4 <- Border(position=c("TOP", "BOTTOM", "LEFT", "RIGHT"), pen=c("BORDER_THIN"))
+
+
+# Recorrer cada medidor
+for(meter in sources$Name){
+  sheet <-createSheet(wb, sheetName = meter)
+  
+  data <- datalog_byMonth %>% filter(Meter == meter)
+  data <- as.data.frame(data[,c(4:14)])
+  
+  ## se agregan columnas con porcentuales
+  
+  data$TN087p <- round(100 * data$TN087/data$cantidad, 2)
+  data$TN087_091p <- round(100 * data$TN087_091/data$cantidad, 2)
+  data$TN091_093p <- round(100 * data$TN091_093/data$cantidad, 2)
+  data$TN093_095p <- round(100 * data$TN093_095/data$cantidad, 2)
+  data$TN095_105p <- round(100 * data$TN095_105/data$cantidad, 2)
+  data$TN105_107p <- round(100 * data$TN105_107/data$cantidad, 2)
+  data$TN107_109p <- round(100 * data$TN107_109/data$cantidad, 2)
+  data$TN109_113p <- round(100 * data$TN109_113/data$cantidad, 2)
+  data$TN113p <- round(100 * data$TN113/data$cantidad, 2)
+  
+  tabla_resumen <- as.data.frame(t(data), stringsAsFactors = F)
+  colnames(tabla_resumen) <- as.character(unlist(tabla_resumen[1,]))
+  tabla_resumen <- tabla_resumen[3:nrow(tabla_resumen),]
+
+  t1 <- tabla_resumen[1:9,]
+  t1[,4:6] <- tabla_resumen[10:18,]
+  colnames(t1) <- c("Vab","Vbc","Vca", "Vab_%","Vbc_%","Vca_%")
+  t1$low_limit <- c(0, limit087, limit091, limit093, limit095, limit105, limit107, limit109, limit113)
+  t1$high_limit <- c(limit087, limit091, limit093, limit095, limit105, limit107, limit109, limit113, 100000)
+  t1 <- t1[,c(7, 8, 1, 4, 2 , 5, 3, 6)]
+  rm(tabla_resumen)
+  
+  setColumnWidth(sheet, colIndex=1, colWidth=20)
+  setColumnWidth(sheet, colIndex=2:ncol(t1), colWidth=15)
+  
+  
+  addDataFrame(t1, sheet, col.names=TRUE, row.names=TRUE,
+               startRow=1, startColumn=1, colnamesStyle=cs3, 
+               rownamesStyle=cs1, showNA=FALSE, characterNA="", byrow=FALSE)    
+  
+  cb <-  CellBlock(sheet, startRow = 1, startColumn = 1, noRows = 10, noColumns = 10, create = F)
+  for (i in 1:9){
+    CB.setBorder(cellBlock = cb, border = cs4, 1:10, i)
+  }
+
+
+
+  data_gather <- data[,c(1,2,12:20)]
+  data_gather <- data_gather %>% gather("Variable", "Value", -c("Quantity", "cantidad"))
+
+  ggplot(data_gather, aes(x = Variable, y = Value, fill = Quantity, label = Value)) +
+    geom_col(position = "dodge", width = 0.7) +
+    scale_y_continuous(labels = function(x) paste0(x, "%"), limits = c(0, 120)) +
+    geom_text(aes(label=sprintf("%0.2f%%", Value)), 
+              position = position_dodge(0.9), 
+              angle = 90, size = 2) + 
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 8)) +
+    ggtitle(meter) +
+    xlab("Medicion") + 
+    ylab("Porcentaje")
+  ggsave(paste0(meter,".png"), width = 7, height = 4, units = "in")
+
+  addPicture(paste0(meter,".png"), sheet, scale = 1.6, startRow = 12, startColumn = 1)
+
+  }
+
+saveWorkbook(wb, "CoopeGuanacaste.xlsx")
+```
+
+
 Valores porcentuales
 
 ```{r}
@@ -161,7 +257,18 @@ percent <- function(x, digits = 2, format = "f", ...) {
   paste0(formatC(100 * x, format = format, digits = digits, ...), "%")
 }
 
-datalog_byMonth_perc <- datalog_byMonth
+datalog_byMonth_perc <- datalog_byMonth %>% 
+  group_by(year, month, Meter) %>% 
+  summarise(cantidad = mean(cantidad),
+            TN087 = mean(TN087),
+            TN087_091 = mean(TN087_091),
+            TN091_093 = mean(TN091_093),
+            TN093_095 = mean(TN093_095),
+            TN095_105 = mean(TN095_105),
+            TN105_107 = mean(TN105_107),
+            TN107_109 = mean(TN107_109),
+            TN109_113 = mean(TN109_113),
+            TN113 = mean(TN113))
 datalog_byMonth_perc$TN087 <- percent(datalog_byMonth_perc$TN087 / datalog_byMonth_perc$cantidad)
 datalog_byMonth_perc$TN087_091 <- percent(datalog_byMonth_perc$TN087_091 / datalog_byMonth_perc$cantidad)
 datalog_byMonth_perc$TN091_093 <- percent(datalog_byMonth_perc$TN091_093 / datalog_byMonth_perc$cantidad)
@@ -172,7 +279,10 @@ datalog_byMonth_perc$TN107_109 <- percent(datalog_byMonth_perc$TN107_109 / datal
 datalog_byMonth_perc$TN109_113 <- percent(datalog_byMonth_perc$TN109_113 / datalog_byMonth_perc$cantidad)
 datalog_byMonth_perc$TN113 <- percent(datalog_byMonth_perc$TN113 / datalog_byMonth_perc$cantidad)
 
-
-
 ```
+
+
+
+
+
 
