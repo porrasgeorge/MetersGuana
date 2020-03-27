@@ -6,12 +6,12 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(dplyr)
-library(RODBC)
+##library(RODBC)
 library(lubridate)
 library(feather)
 library(ggplot2)
 library(tidyr)
-library(xlsx)
+library(openxlsx)
 
 ```
 
@@ -174,32 +174,25 @@ datalog_byMonth <- dataLog %>%
 Creacion del histograma
 
 ```{r}
-# Libro de excel
-wb<-createWorkbook(type="xlsx")
-cs1 <- CellStyle(wb) + Font(wb, isItalic=TRUE)           # rowcolumns
-cs2 <- CellStyle(wb) + Font(wb, color="blue")
-cs3 <- CellStyle(wb) + Font(wb, isBold=TRUE) + Border()  # header
-cs4 <- CellStyle(wb) + Border(position=c("TOP", "BOTTOM", "LEFT", "RIGHT"), pen=c("BORDER_THIN"))
+wb <- createWorkbook()
 
 # Recorrer cada medidor
 for(meter in sources$Name){
-  sheet <-createSheet(wb, sheetName = meter)
   meterFileName = paste0(meter,".png");
-  
+  addWorksheet(wb, meter)
   data <- datalog_byMonth %>% filter(Meter == meter)
   data <- as.data.frame(data[,c(4:14)])
   
   ## se agregan columnas con porcentuales
-  
-  data$TN087p <- round(100 * data$TN087/data$cantidad, 2)
-  data$TN087_091p <- round(100 * data$TN087_091/data$cantidad, 2)
-  data$TN091_093p <- round(100 * data$TN091_093/data$cantidad, 2)
-  data$TN093_095p <- round(100 * data$TN093_095/data$cantidad, 2)
-  data$TN095_105p <- round(100 * data$TN095_105/data$cantidad, 2)
-  data$TN105_107p <- round(100 * data$TN105_107/data$cantidad, 2)
-  data$TN107_109p <- round(100 * data$TN107_109/data$cantidad, 2)
-  data$TN109_113p <- round(100 * data$TN109_113/data$cantidad, 2)
-  data$TN113p <- round(100 * data$TN113/data$cantidad, 2)
+  data$TN087p <- data$TN087/data$cantidad
+  data$TN087_091p <- data$TN087_091/data$cantidad
+  data$TN091_093p <- data$TN091_093/data$cantidad
+  data$TN093_095p <- data$TN093_095/data$cantidad
+  data$TN095_105p <- data$TN095_105/data$cantidad
+  data$TN105_107p <- data$TN105_107/data$cantidad
+  data$TN107_109p <- data$TN107_109/data$cantidad
+  data$TN109_113p <- data$TN109_113/data$cantidad
+  data$TN113p <- data$TN113/data$cantidad
   
   tabla_resumen <- as.data.frame(t(data), stringsAsFactors = F)
   colnames(tabla_resumen) <- as.character(unlist(tabla_resumen[1,]))
@@ -207,60 +200,50 @@ for(meter in sources$Name){
 
   t1 <- tabla_resumen[1:9,]
   t1[,4:6] <- tabla_resumen[10:18,]
-  colnames(t1) <- c("Vab","Vbc","Vca", "Vab_%","Vbc_%","Vca_%")
-  t1$low_limit <- c(0, limit087, limit091, limit093, limit095, limit105, limit107, limit109, limit113)
-  t1$high_limit <- c(limit087, limit091, limit093, limit095, limit105, limit107, limit109, limit113, 100000)
+  colnames(t1) <- c("Cantidad_Vab","Cantidad_Vbc","Cantidad_Vca", "Porcent_Vab","Porcent_Vbc","Porcent_Vca")
+  t1$Lim_Inferior <- c(0, limit087, limit091, limit093, limit095, limit105, limit107, limit109, limit113)
+  t1$Lim_Superior <- c(limit087, limit091, limit093, limit095, limit105, limit107, limit109, limit113, 100000)
   t1 <- t1[,c(7, 8, 1, 4, 2 , 5, 3, 6)]
   
   for (i in 1:ncol(t1)){
     t1[,i] <- as.numeric(t1[,i]) 
   }
-  
   rm(tabla_resumen)
   
-  setColumnWidth(sheet, colIndex=1, colWidth=20)
-  setColumnWidth(sheet, colIndex=2:(ncol(t1)+1), colWidth=15)
-
-  addDataFrame(t1, sheet, col.names=TRUE, row.names=TRUE,
-               startRow=1, startColumn=1, colnamesStyle=cs3, 
-               rownamesStyle=cs1, showNA=FALSE, characterNA="", byrow=FALSE)    
+  t1 <- tibble::rownames_to_column(t1, "Medicion")
+  class(t1$Porcent_Vab) <- "percentage"
+  class(t1$Porcent_Vbc) <- "percentage"
+  class(t1$Porcent_Vca) <- "percentage"
   
-  cb <-  CellBlock(sheet, startRow = 1, startColumn = 1, noRows = 10, noColumns = 10, create = F)
-  for (i in 1:9){
-    CB.setBorder(cellBlock = cb, border = cs4, 1:10, i)
-  }
-
+  setColWidths(wb, meter, cols = c(1:10), widths = c(20, rep(15, 9) ))
+  writeDataTable(wb, meter, x = t1, startRow = 2, rowNames = F, tableStyle = "TableStyleMedium9")
+  
   data_gather <- data[,c(1,2,12:20)]
   data_gather <- data_gather %>% gather("Variable", "Value", -c("Quantity", "cantidad"))
-
-  ggplot(data_gather, aes(x = Variable, y = Value, fill = Quantity, label = Value)) +
+  
+  p1 <- ggplot(data_gather, aes(x = Variable, y = Value, fill = Quantity, label = Value)) +
     geom_col(position = "dodge", width = 0.7) +
-    scale_y_continuous(labels = function(x) paste0(x, "%"), limits = c(0, 120)) +
-    geom_text(aes(label=sprintf("%0.2f%%", Value)), 
+    scale_y_continuous(labels = function(x) paste0(100*x, "%"), limits = c(0, 1.2)) +
+    geom_text(aes(label=sprintf("%0.2f%%", 100*Value)), 
               position = position_dodge(0.9), 
               angle = 90, size = 2) + 
     theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 8)) +
-    ggtitle(meter) +
+    ggtitle(gsub("_", " ", meter)) +
     xlab("Medicion") + 
     ylab("Porcentaje")
-  ggsave(meterFileName, width = 7, height = 4, units = "in")
-
-  addPicture(meterFileName, sheet, scale = 1.6, startRow = 12, startColumn = 1)
-  
-  file.remove(meterFileName)
-
+  print(p1) #plot needs to be showing
+  insertPlot(wb, meter, xy = c("A", 16), width = 12, height = 6, fileType = "png", units = "in")
   }
 
-saveWorkbook(wb, "CoopeGuanacaste.xlsx")
+saveWorkbook(wb, "Coopeguanacaste.xlsx", overwrite = TRUE)
 ```
 
 
 Valores porcentuales
 
 ```{r}
-percent <- function(x, digits = 2, format = "f", ...) {
-  paste0(formatC(100 * x, format = format, digits = digits, ...), "%")
-}
+wb2 <- createWorkbook()
+ws2 <- addWorksheet(wb2, "ABC")
 
 datalog_byMonth_perc <- datalog_byMonth %>% 
   group_by(year, month, Meter) %>% 
@@ -274,56 +257,32 @@ datalog_byMonth_perc <- datalog_byMonth %>%
             TN107_109 = mean(TN107_109),
             TN109_113 = mean(TN109_113),
             TN113 = mean(TN113))
+datalog_byMonth_perc$Meter <- gsub("_", " ", datalog_byMonth_perc$Meter)
+datalog_byMonth_perc$TN087 <- datalog_byMonth_perc$TN087 / datalog_byMonth_perc$cantidad
+datalog_byMonth_perc$TN087_091 <- datalog_byMonth_perc$TN087_091 / datalog_byMonth_perc$cantidad
+datalog_byMonth_perc$TN091_093 <- datalog_byMonth_perc$TN091_093 / datalog_byMonth_perc$cantidad
+datalog_byMonth_perc$TN093_095 <- datalog_byMonth_perc$TN093_095 / datalog_byMonth_perc$cantidad
+datalog_byMonth_perc$TN095_105 <- datalog_byMonth_perc$TN095_105 / datalog_byMonth_perc$cantidad
+datalog_byMonth_perc$TN105_107 <- datalog_byMonth_perc$TN105_107 / datalog_byMonth_perc$cantidad
+datalog_byMonth_perc$TN107_109 <- datalog_byMonth_perc$TN107_109 / datalog_byMonth_perc$cantidad
+datalog_byMonth_perc$TN109_113 <- datalog_byMonth_perc$TN109_113 / datalog_byMonth_perc$cantidad
+datalog_byMonth_perc$TN113 <- datalog_byMonth_perc$TN113 / datalog_byMonth_perc$cantidad
 
-datalog_byMonth_perc$TN087 <- percent(datalog_byMonth_perc$TN087 / datalog_byMonth_perc$cantidad)
-datalog_byMonth_perc$TN087_091 <- percent(datalog_byMonth_perc$TN087_091 / datalog_byMonth_perc$cantidad)
-datalog_byMonth_perc$TN091_093 <- percent(datalog_byMonth_perc$TN091_093 / datalog_byMonth_perc$cantidad)
-datalog_byMonth_perc$TN093_095 <- percent(datalog_byMonth_perc$TN093_095 / datalog_byMonth_perc$cantidad)
-datalog_byMonth_perc$TN095_105 <- percent(datalog_byMonth_perc$TN095_105 / datalog_byMonth_perc$cantidad)
-datalog_byMonth_perc$TN105_107 <- percent(datalog_byMonth_perc$TN105_107 / datalog_byMonth_perc$cantidad)
-datalog_byMonth_perc$TN107_109 <- percent(datalog_byMonth_perc$TN107_109 / datalog_byMonth_perc$cantidad)
-datalog_byMonth_perc$TN109_113 <- percent(datalog_byMonth_perc$TN109_113 / datalog_byMonth_perc$cantidad)
-datalog_byMonth_perc$TN113 <- percent(datalog_byMonth_perc$TN113 / datalog_byMonth_perc$cantidad)
+class(datalog_byMonth_perc$TN087) <- "percentage"
+class(datalog_byMonth_perc$TN087_091) <- "percentage"
+class(datalog_byMonth_perc$TN091_093) <- "percentage"
+class(datalog_byMonth_perc$TN093_095) <- "percentage"
+class(datalog_byMonth_perc$TN095_105) <- "percentage"
+class(datalog_byMonth_perc$TN105_107) <- "percentage"
+class(datalog_byMonth_perc$TN107_109) <- "percentage"
+class(datalog_byMonth_perc$TN109_113) <- "percentage"
+class(datalog_byMonth_perc$TN113) <- "percentage"
 
-TITLE_STYLE <- CellStyle(wb2)+ Font(wb2,  heightInPoints=50, 
-                                    isBold=TRUE, name="Arial") + Alignment(horizontal="ALIGN_CENTER")
+setColWidths(wb2, ws2, cols = c(3:13), widths = c(20, rep(12,10)))
+writeDataTable(wb2, ws2, x = datalog_byMonth_perc, startRow = 2, rowNames = F, tableStyle = "TableStyleMedium9")
 
+# addDataFrame(as.data.frame(datalog_byMonth_perc), sheet2, col.names=TRUE, row.names=F,
+#               startRow=1, startColumn=1, rownamesStyle=TITLE_STYLE)
 
-
-addDataFrame(as.data.frame(datalog_byMonth_perc), sheet2, col.names=TRUE, row.names=F,
-               startRow=1, startColumn=1, rownamesStyle=TITLE_STYLE)
-
-wb2 <-createWorkbook(type="xlsx")
-sheet2 <-createSheet(wb2, sheetName = "ABC")
-setColumnWidth(sheet2, colIndex=3, colWidth=30)
-
-
-
-TABLE_ROWNAMES_STYLE <- CellStyle(wb2) + Font(wb2, isBold=TRUE)
-TABLE_COLNAMES_STYLE <- CellStyle(wb2) + Font(wb2, isBold=TRUE) +
-    Alignment(wrapText=TRUE, horizontal="ALIGN_CENTER") +
-    Border(color="black", position=c("TOP", "BOTTOM"), 
-           pen=c("BORDER_THIN", "BORDER_THICK"))
-TABLE_STYLE <- CellStyle(wb2) + 
-    Alignment(wrapText=TRUE, horizontal="ALIGN_CENTER")
-
-# Add a table
-addDataFrame(state.x77, sheet2, startRow=20, startColumn=1, 
-             colnamesStyle = TABLE_COLNAMES_STYLE,
-             rownamesStyle = TABLE_ROWNAMES_STYLE,  TABLE_STYLE)
-# Change column width
-setColumnWidth(sheet2, colIndex=c(1:ncol(state.x77)), colWidth=11)
-
-saveWorkbook(wb2, "CoopeGuanacaste2.xlsx")
+saveWorkbook(wb2, "CoopeGuanacaste2.xlsx", overwrite = T)
 ```
-
-
-```{r}
-glimpse(data)
-glimpse(datalog_byMonth_perc)
-
-```
-
-
-
-
